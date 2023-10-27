@@ -21,6 +21,64 @@ VLEI_DEV_BRANCH="dev"
 KERIA_DEV_BRANCH="main"
 SIGNIFY_DEV_BRANCH="main"
 
+declare -A PID_MAP
+delPid="delegator"
+keriaPid="keria"
+vleiPid="vLEI"
+witPid="witness"
+
+vleiPort=7723
+keriaPortStart=3901
+keriaPortEnd=3903
+witPortStart=5632
+witPortEnd=5647
+
+function checkPorts() {
+    # Get the output from lsof command
+    output=$(sudo lsof -i -P -n | grep LISTEN)
+
+    # Set the process name and port range you want to check and kill
+    if [ "$#" -lt 1 ]; then
+        echo "Cant check ports without a process name and port"
+        return 1
+    else
+        sPort="$1"
+        echo "start port is: $sPort"
+        ePort=$sPort
+        if [ -z "$2" ]; then
+            echo "Using only start port"
+        else
+            ePort="$2"
+            echo "end port is: $ePort"
+        fi
+
+        # Get the output from lsof command
+        output=$(sudo lsof -i -P -n | grep LISTEN)
+
+        # Loop through the range of ports
+        for port in $(seq $sPort $ePort); do
+            # Parse the output and get the PIDs of the target process for the specific port
+            pids=$(echo "$output" | grep ":$port" | awk '{print $2}')
+
+            # Identify each found PID
+            for pid in $pids; do
+                if [ ! -z "$pid" ]; then
+                    echo "Found PID $pid on port $port"
+                    killInput="n"
+                    read -p "Kill PID $pid on port $port? (y/n): " killInput
+                    if [ ${killInput} == "y" ]; then
+                        kill $pid
+                    else
+                        return 1
+                    fi
+                fi
+            done
+        done
+    fi
+
+    return 0
+}
+
 function getKeripyDir() {
     # Check if the environment variable is set
     if [ -z "$KERIPY_DIR" ]; then
@@ -65,7 +123,6 @@ function runDelegator() {
     keriDir=$1
     echo "Creating delegator"
     KERIPY_SCRIPTS_DIR="${keriDir}/scripts"
-    delPid=-1
     if [ -d "${KERIPY_SCRIPTS_DIR}" ]; then
         kli init --name delegator --nopasscode --config-dir "${KERIPY_SCRIPTS_DIR}" --config-file demo-witness-oobis --salt 0ACDEyMzQ1Njc4OWdoaWpsaw
         KERIPY_DELEGATOR_CONF="${KERIPY_SCRIPTS_DIR}/demo/data/delegator.json"
@@ -75,7 +132,7 @@ function runDelegator() {
             echo "Delegator created"
             # delgator auto-accepts the delegation request
             kli delegate confirm --name delegator --alias delegator -Y &
-            delPid=$!
+            PID_MAP[$delPid]=$!
             echo "Delegator waiting to auto-accept delegation request"
         else
             echo "Delegator configuration missing ${KERIPY_DELEGATOR_CONF}"
@@ -90,17 +147,11 @@ function runMultisig() {
     keriDir=$1
     echo "Creating multisig"
     KERIPY_SCRIPTS_DIR="${keriDir}/scripts"
-    delPid=-1
     if [ -d "${KERIPY_SCRIPTS_DIR}" ]; then
 
         # Follow commands run in parallel
         kli multisig incept --name multisig1 --alias multisig1 --group multisig --file ${KERI_DEMO_SCRIPT_DIR}/data/multisig-triple-sample.json &
-        pid=$!
-        PID_LIST+=" $pid"
         kli multisig incept --name multisig2 --alias multisig2 --group multisig --file ${KERI_SCRIPTS_DIR}/data/multisig-triple-sample.json &
-        pid=$!
-        PID_LIST+=" $pid"
-
 
         kli init --name multisig1 --salt 0ACDEyMzQ1Njc4OWxtbm9aBc --nopasscode --config-dir "${KERIPY_SCRIPTS_DIR}" --config-file demo-witness-oobis
         kli init --name multisig2 --salt 0ACDEyMzQ1Njc4OWdoaWpsaw --nopasscode --config-dir "${KERIPY_SCRIPTS_DIR}" --config-file demo-witness-oobis
@@ -148,7 +199,6 @@ function runIssueEcr() {
 
 function runKeri() {
     cd ${ORIG_CUR_DIR} || exit
-    witPid=-1
     keriDir=$(getKeripyDir)
     echo "Keripy dir set to: ${keriDir}"
     read -p "Run witness network (y/n)? [y]: " input
@@ -159,7 +209,7 @@ function runKeri() {
             updateFromGit ${KERI_DEV_BRANCH}
             installPythonUpdates
             rm -rf ${KERI_PRIMARY_STORAGE}/*;rm -Rf ${KERI_FALLBACK_STORAGE}/*;kli witness demo &
-            witPid=$!
+            PID_MAP[$witPid]=$!
             sleep 5
             echo "Clean witness network launched"
         else
@@ -174,7 +224,6 @@ function runKeri() {
 
 function runKeria() {
         # run keria cloud agent
-    keriaPid=-1
     read -p "Run Keria (y/n)? [y]: " input
     runKeria=${input:-"y"}
     if [ "${runKeria}" == "y" ]; then
@@ -186,7 +235,7 @@ function runKeria() {
             installPythonUpdates
             export KERI_AGENT_CORS=true
             keria start --config-file demo-witness-oobis.json --config-dir "${keriaDir}/scripts" &
-            keriaPid=$!
+            PID_MAP[$keriaPid]=$!
             sleep 5
             echo "Keria cloud agent running"
         else
@@ -209,7 +258,6 @@ function runSignifyIntegrationTests() {
         echo "Skipping signify test"
     else
         echo "Launching Signifypy test ${runSignify}"
-        signifyPid=-1
         updateFromGit ${SIGNIFY_DEV_BRANCH}
         installPythonUpdates
         iClient="./integration/app/integration_clienting.py"
@@ -221,7 +269,7 @@ function runSignifyIntegrationTests() {
                 runMultisig ${keriDir}
             fi
             python -c "from ${integrationTestModule} import ${runSignify}; ${runSignify}()" &
-            signifyPid=$!
+            PID_MAP[$signifyPid]=$!
             sleep 10
             echo "Completed signify ${runSignify}"
         else
@@ -234,7 +282,6 @@ function runSignifyIntegrationTests() {
 function runVlei() {
     # run vLEI cloud agent
     cd ${ORIG_CUR_DIR} || exit
-    vleiPid=-1
     read -p "Run vLEI (y/n)? [y]: " input
     runVlei=${input:-"y"}
     if [ "${runVlei}" == "y" ]; then
@@ -245,7 +292,7 @@ function runVlei() {
             updateFromGit ${VLEI_DEV_BRANCH}
             installPythonUpdates
             vLEI-server -s ./schema/acdc -c ./samples/acdc/ -o ./samples/oobis/ &
-            vleiPid=$!
+            PID_MAP[$vleiPid]=$!
             sleep 5
             echo "vLEI server is running"
         else
@@ -277,38 +324,63 @@ function updateFromGit() {
     fi
 }
 
+function killProcesses() {
+    echo "Tearing down any leftover processes"
+    for task_name in "${!PID_MAP[@]}"; do
+        echo "Killing $task_name with PID ${PID_MAP["$task_name"]}"
+        kill "${PID_MAP["$task_name"]}" >/dev/null 2>&1
+    done
+}
+
+function printProcesses() {
+    echo "Processes running:"
+    for task_name in "${!PID_MAP[@]}"; do
+        echo "Process running $task_name with PID ${PID_MAP["$task_name"]}"
+    done
+}
+
 echo "Welcome to the integration test setup/run/teardown script"
 
 runSignify="test_salty"
 while [ "${runSignify}" != "n" ]
 do
     echo "Setting up..."
+    if checkPorts ${witPortStart} ${witPortEnd}; then
+        runKeri
+    else
+        echo "Witness network already running"
+    fi
 
-    runKeri
+    printProcesses
 
-    runVlei
+    if checkPorts ${vleiPort}; then
+        runVlei
+    else
+        echo "vLEI server already running"
+    fi
 
-    runKeria
+    printProcesses
+
+    if checkPorts ${keriaPortStart} ${keriaPortEnd}; then
+        runKeria
+    else
+        echo "Keria cloud agent already running"
+    fi
+
+    printProcesses
 
     runSignifyIntegrationTests
-
+    
+    printProcesses
+    
     runIssueEcr
-
+    
+    printProcesses
     echo ""
 
     read -p "Your servers still running, hit enter to tear down: " input
-    
-    echo "Tearing down any leftover processes"
-    #tear down the signify client
-    kill "$signifyPid" >/dev/null 2>&1
-    # tear down the keria cloud agent
-    kill $keriaPid >/dev/null 2>&1
-    # tear down the delegator
-    kill "$delPid" >/dev/null 2>&1
-    # tear down the vLEI server
-    kill $vleiPid >/dev/null 2>&1
-    # tear down the witness network
-    kill $witPid >/dev/null 2>&1
+    killProcesses
+    printProcesses
 
     read -p "Run another test [n]?: " input
     runSignify=${input:-"n"}
