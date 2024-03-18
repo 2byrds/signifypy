@@ -33,12 +33,17 @@ def create_aid():
         "BIKKuvBwpmDVA4Ds-EpL5bt9OqPzWPja2LigFYZN2YfX"
     ]
 
+    op = oobis.resolve(
+        oobi="http://127.0.0.1:5642/oobi/BBilc4"
+             "-L3tFUnfM_wJr4S4OJanAv_VmF_dJNN6vkf2Ha/oobi",
+        alias="wan")
+
     op = identifiers.create("BankUser", bran="0123456789abcdefghijk", wits=wits, toad="2")
     op = op[2]
 
     while not op["done"]:
         op = operations.get(op["name"])
-        sleep(1)
+    sleep(3)
 
     icp = serdering.SerderKERI(sad=op["response"])
     assert icp.pre == "EBcIURLpxmVwahksgrsGW6_dUw0zBhyEHYFk17eWrZfk"
