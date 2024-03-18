@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  witnesses:
+    # container_name: witnesshost
+    # hostname: witnesshost
+    image: 2byrds/keri:1.1.7
+    platform: linux/amd64
+    tty: true
+    volumes:
+      - ./scripts/keri/cf/main/:/keripy/scripts/keri/cf/main/
+    ports:
+        - 5642:5642  # witness
+        - 5643:5643  # witness
+        - 5644:5644  # witness
+    entrypoint: kli witness demo
+
+  keria:
+    image: 2byrds/keria:latest
+    ports:
+      - 3901:3901
+      - 3902:3902
+      - 3903:3903
+    environment:
+      - KERI_AGENT_CORS=${KERI_AGENT_CORS:-false}
+    volumes:
+      - ./scripts/keri/cf/:/keripy/scripts/keri/cf/
+    depends_on:
+      - witnesses
+
+  vlei:
+    image: 2byrds/vlei:latest
+    ports:
+      - 7723:7723
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONIOENCODING=UTF-8
+    entrypoint: [ "vLEI-server", "-s", "./schema/acdc", "-c" , "./samples/acdc/", "-o", "./samples/oobis/" ]
+
+  signifypy-vlei:
+    build:
+      context: .
+      dockerfile: ./images/signifypy-vlei.dockerfile
+    image: 2byrds/signifypy-vlei:latest
+    entrypoint: tail -f /dev/null
+    tty: true
+    depends_on:
+      - vlei
+      - keria

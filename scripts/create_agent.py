@@ -15,7 +15,7 @@ from signify.app.clienting import SignifyClient
 
 
 def create_agent():
-    url = "http://localhost:3901"
+    url = "http://127.0.0.1:3901"
     bran = b'0123456789abcdefghijk'
     tier = Tiers.med
 
@@ -32,7 +32,7 @@ def create_agent():
 
     evt, siger = client.ctrl.event()
 
-    res = requests.post(url="http://localhost:3903/boot",
+    res = requests.post(url="http://127.0.0.1:3903/boot",
                         json=dict(
                             icp=evt.ked,
                             sig=siger.qb64,

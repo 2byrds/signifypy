@@ -14,7 +14,7 @@ from signify.app.clienting import SignifyClient
 
 
 def create_aid():
-    url = "http://localhost:3901"
+    url = "http://127.0.0.1:3901"
     bran = b'0123456789abcdefghijk'
     tier = Tiers.low
 
