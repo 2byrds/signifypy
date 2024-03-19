@@ -13,9 +13,9 @@ from signify.app.clienting import SignifyClient
 
 def list_credentials():
     url = "http://localhost:3901"
-    # bran = b'0123456789abcdefghijk'
+    bran = b'0123456789abcdefghijk'
     # bran = b'PoLT1X6fDQliXyCuzCVuv'
-    bran = b'Pwt6yLXRSs7IjZ23tRHIV'
+    # bran = b'Pwt6yLXRSs7IjZ23tRHIV'
     tier = Tiers.low
 
     client = SignifyClient(passcode=bran, tier=tier, url=url)
@@ -24,10 +24,11 @@ def list_credentials():
     res = identifiers.list()
 
     aids = res['aids']
+    print("Person aids",aids)
 
-    assert len(aids) == 2
+    assert len(aids) == 1
 
-    res = identifiers.get("holder")
+    res = identifiers.get("BankUser")
 
     aid = res['prefix']
     print(aid)
